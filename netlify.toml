@@ -1,0 +1,12 @@
+[build]
+  command = "bun run build"
+  publish = ".next"
+
+[build.environment]
+  # Tell Netlify's secret scanner that this specific key is NOT a secret
+  # and is allowed to appear in build logs and bundles.
+  SECRETS_SCAN_OMIT_KEYS = "SYSTEM_CAPACITY_BYTES"
+
+[plugins]
+  # Ensure the Next.js runtime is properly configured
+  package = "@netlify/plugin-nextjs"
