@@ -6,7 +6,7 @@
  * Bun-powered script for bulk-importing local files into R2 + Neon.
  */
 
-import { readdir } from 'node:fs/promises';
+import { readdir, mkdir } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { $ } from 'bun';
@@ -19,6 +19,7 @@ config({ path: '.env.local' });
 
 // ---- Configuration ----
 const R2_BUCKET = process.env.R2_BUCKET || 'phaethon-os';
+const TEMP_DIR = join(process.cwd(), '.tmp');
 const pgSql = neon(process.env.DATABASE_URL!);
 const db = drizzle(pgSql, { schema });
 
@@ -238,6 +239,10 @@ async function insertFile(record: {
 
 async function main() {
     console.log('\n  PHAETHON OS - INGEST UTILITY (NEON)\n');
+
+    // Ensure local .tmp exists
+    await mkdir(TEMP_DIR, { recursive: true });
+
     const tasks = await walkDirectory(SOURCE_DIR, FOLDER_ID || null);
 
     if (tasks.length === 0) {
@@ -267,7 +272,7 @@ async function main() {
         let thumbnailId: string | undefined = undefined;
         if (mimeType.startsWith('video/')) {
             const tId = crypto.randomUUID();
-            const tempThumb = `/tmp/phaethon_thumb_${tId}.jpg`;
+            const tempThumb = join(TEMP_DIR, `phaethon_thumb_${tId}.jpg`);
             if (await generateThumbnailSnippet(filePath, tempThumb)) {
                 if (await uploadToR2(tId, tempThumb)) {
                     const thumbFileInfo = await stat(tempThumb);
@@ -283,9 +288,13 @@ async function main() {
                         originalName: `thumb_${fileName}.jpg`,
                     })) {
                         thumbnailId = tId;
+                        console.log(`         [THUMBNAIL] Generated and linked (ID: ${tId})`);
                     }
                 }
-                await $`rm ${tempThumb}`.quiet();
+                // Cleanup using native Bun.file or rm
+                await $`rm -f ${tempThumb}`.quiet();
+            } else {
+                console.warn(`         [WARNING] Thumbnail generation failed. Ensure ffmpeg/ffprobe are installed search path.`);
             }
         }
 

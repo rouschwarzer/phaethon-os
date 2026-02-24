@@ -18,6 +18,7 @@ yarn.lock
 # next.js
 /.next/
 /out/
+/.tmp/
 
 # production
 /build
