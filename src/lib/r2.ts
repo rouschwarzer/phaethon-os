@@ -39,6 +39,7 @@ export const R2Service = {
             Key: key,
             Body: data,
             ContentType: options?.httpMetadata?.contentType,
+            ContentLength: options?.contentLength,
         });
         return await client.send(command);
     },

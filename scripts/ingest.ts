@@ -6,7 +6,7 @@
  * Bun-powered script for bulk-importing local files into R2 + Neon.
  */
 
-import { readdir, stat } from 'node:fs/promises';
+import { readdir } from 'node:fs/promises';
 import { join, basename, extname } from 'node:path';
 import { parseArgs } from 'node:util';
 import { $ } from 'bun';
@@ -23,7 +23,8 @@ const pgSql = neon(process.env.DATABASE_URL!);
 const db = drizzle(pgSql, { schema });
 
 import { R2Service } from '../src/lib/r2';
-import { readFile } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
 
 // ---- MIME type mapping ----
 const MIME_MAP: Record<string, string> = {
@@ -140,10 +141,13 @@ async function walkDirectory(dirPath: string, parentId: string | null): Promise<
 
 async function uploadToR2(uuid: string, filePath: string): Promise<boolean> {
     try {
-        const fileData = await readFile(filePath);
+        const fileStat = await stat(filePath);
+        const fileStream = createReadStream(filePath);
         const mimeType = getMimeType(filePath);
-        await R2Service.put(uuid, fileData, {
-            httpMetadata: { contentType: mimeType }
+
+        await R2Service.put(uuid, fileStream, {
+            httpMetadata: { contentType: mimeType },
+            contentLength: fileStat.size // Important for streams
         });
         return true;
     } catch (err) {
