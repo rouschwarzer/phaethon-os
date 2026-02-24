@@ -147,8 +147,16 @@ async function uploadToR2(uuid: string, filePath: string): Promise<boolean> {
 
         await R2Service.put(uuid, fileStream, {
             httpMetadata: { contentType: mimeType },
-            contentLength: fileStat.size // Important for streams
+            contentLength: fileStat.size,
+            onProgress: (progress) => {
+                const loaded = progress.loaded || 0;
+                const total = progress.total || fileStat.size;
+                const percent = Math.round((loaded / total) * 100);
+                // Clear line and write progress
+                process.stdout.write(`         [UPLOAD] ${percent}% (${(loaded / 1024 / 1024).toFixed(2)}MB / ${(total / 1024 / 1024).toFixed(2)}MB)\r`);
+            }
         });
+        process.stdout.write('\n'); // New line after completion
         return true;
     } catch (err) {
         console.error(`         [UPLOAD EXCEPTION] ${err}`);

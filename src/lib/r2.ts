@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { Upload } from '@aws-sdk/lib-storage';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 const R2_BUCKET = process.env.R2_BUCKET || 'phaethon-os';
@@ -32,16 +33,29 @@ export const R2Service = {
      * @param data The file data.
      * @param options Optional R2 metadata.
      */
-    async put(key: string, data: any, options?: any) {
+    async put(key: string, data: any, options?: { httpMetadata?: { contentType?: string }, contentLength?: number, onProgress?: (progress: any) => void }) {
         const client = getS3Client();
-        const command = new PutObjectCommand({
-            Bucket: R2_BUCKET,
-            Key: key,
-            Body: data,
-            ContentType: options?.httpMetadata?.contentType,
-            ContentLength: options?.contentLength,
+
+        const parallelUploads3 = new Upload({
+            client,
+            params: {
+                Bucket: R2_BUCKET,
+                Key: key,
+                Body: data,
+                ContentType: options?.httpMetadata?.contentType,
+                ContentLength: options?.contentLength,
+            },
+            // High water mark for multi-part upload (default 5MB)
+            queueSize: 4,
+            partSize: 1024 * 1024 * 5,
+            leavePartsOnError: false,
         });
-        return await client.send(command);
+
+        if (options?.onProgress) {
+            parallelUploads3.on("httpUploadProgress", options.onProgress);
+        }
+
+        return await parallelUploads3.done();
     },
 
     /**
