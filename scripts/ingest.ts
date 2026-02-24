@@ -18,9 +18,12 @@ import { config } from 'dotenv';
 config({ path: '.env.local' });
 
 // ---- Configuration ----
-const R2_BUCKET = 'phaethon-r2';
+const R2_BUCKET = process.env.R2_BUCKET || 'phaethon-os';
 const pgSql = neon(process.env.DATABASE_URL!);
 const db = drizzle(pgSql, { schema });
+
+import { R2Service } from '../src/lib/r2';
+import { readFile } from 'node:fs/promises';
 
 // ---- MIME type mapping ----
 const MIME_MAP: Record<string, string> = {
@@ -137,8 +140,12 @@ async function walkDirectory(dirPath: string, parentId: string | null): Promise<
 
 async function uploadToR2(uuid: string, filePath: string): Promise<boolean> {
     try {
-        const result = await $`rclone copyto ${filePath} r2-general:${R2_BUCKET}/${uuid} -P`;
-        return result.exitCode === 0;
+        const fileData = await readFile(filePath);
+        const mimeType = getMimeType(filePath);
+        await R2Service.put(uuid, fileData, {
+            httpMetadata: { contentType: mimeType }
+        });
+        return true;
     } catch (err) {
         console.error(`         [UPLOAD EXCEPTION] ${err}`);
         return false;
