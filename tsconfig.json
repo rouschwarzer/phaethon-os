@@ -28,7 +28,7 @@
       ]
     },
     "types": [
-      "@cloudflare/workers-types"
+      "node"
     ]
   },
   "include": [
