@@ -164,9 +164,40 @@ async function uploadToR2(uuid: string, filePath: string): Promise<boolean> {
     }
 }
 
+/**
+ * Gets video duration using ffprobe.
+ */
+async function getVideoDuration(videoPath: string): Promise<number> {
+    try {
+        const result = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${videoPath}`.text();
+        const duration = parseFloat(result.trim());
+        return isNaN(duration) ? 0 : duration;
+    } catch {
+        return 0;
+    }
+}
+
 async function generateThumbnailSnippet(videoPath: string, thumbnailPath: string): Promise<boolean> {
     try {
-        const result = await $`ffmpeg -i ${videoPath} -ss 00:00:01 -vframes 1 -q:v 2 ${thumbnailPath} -y`.quiet();
+        const duration = await getVideoDuration(videoPath);
+
+        let seekTime = '00:00:01'; // Default fallback
+
+        if (duration > 60) {
+            // For longer videos (> 1min), skip first 15% and last 15%
+            const start = duration * 0.15;
+            const end = duration * 0.85;
+            const randomOffset = start + (Math.random() * (end - start));
+            seekTime = randomOffset.toFixed(3);
+        } else if (duration > 0) {
+            // For short videos, just go to the middle
+            seekTime = (duration / 2).toFixed(3);
+        }
+
+        // Use 'thumbnail' filter: it analyzes a sequence of frames (default 100) 
+        // to find the most representative (non-solid/bright) one.
+        // We decode a small segment starting at our seekTime.
+        const result = await $`ffmpeg -ss ${seekTime} -i ${videoPath} -vf "thumbnail=100" -vframes 1 -q:v 2 ${thumbnailPath} -y`.quiet();
         return result.exitCode === 0;
     } catch {
         return false;
