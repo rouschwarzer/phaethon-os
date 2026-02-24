@@ -249,12 +249,16 @@ async function main() {
         process.exit(0);
     }
 
-    console.log(`\n[INFO] Found ${tasks.length} file(s) to process.\n`);
+    console.log(`\n[INFO] Found ${tasks.length} file(s) to process. (Concurrency: 4)\n`);
 
     let successCount = 0;
     let failCount = 0;
+    const CONCURRENCY = 4;
 
-    for (const task of tasks) {
+    /**
+     * Worker function to process a single task.
+     */
+    const processTask = async (task: IngestTask) => {
         const { filePath, folderId } = task;
         const uuid = crypto.randomUUID();
         const fileName = basename(filePath);
@@ -262,11 +266,9 @@ async function main() {
         const category = CATEGORY_OVERRIDE || getCategoryFromMime(mimeType);
         const fileInfo = await stat(filePath);
 
-        console.log(`[INGEST] ${fileName} (UUID: ${uuid})`);
-
         if (DRY_RUN) {
             successCount++;
-            continue;
+            return;
         }
 
         let thumbnailId: string | undefined = undefined;
@@ -288,13 +290,9 @@ async function main() {
                         originalName: `thumb_${fileName}.jpg`,
                     })) {
                         thumbnailId = tId;
-                        console.log(`         [THUMBNAIL] Generated and linked (ID: ${tId})`);
                     }
                 }
-                // Cleanup using native Bun.file or rm
                 await $`rm -f ${tempThumb}`.quiet();
-            } else {
-                console.warn(`         [WARNING] Thumbnail generation failed. Ensure ffmpeg/ffprobe are installed search path.`);
             }
         }
 
@@ -312,14 +310,27 @@ async function main() {
                 thumbnailId,
             })) {
                 successCount++;
+                console.log(`[OK] ${fileName}`);
             } else {
                 failCount++;
+                console.error(`[FAIL - DB] ${fileName}`);
             }
         } else {
             failCount++;
+            console.error(`[FAIL - R2] ${fileName}`);
         }
-        console.log('');
+    };
+
+    // Process tasks using a simple pool
+    const pool = new Set();
+    for (const task of tasks) {
+        if (pool.size >= CONCURRENCY) {
+            await Promise.race(pool);
+        }
+        const promise = processTask(task).finally(() => pool.delete(promise));
+        pool.add(promise);
     }
+    await Promise.all(pool);
 
     console.log(`\n  RESULTS: ${successCount} success, ${failCount} failed.`);
 }
