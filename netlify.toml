@@ -7,6 +7,6 @@
   # and is allowed to appear in build logs and bundles.
   SECRETS_SCAN_OMIT_KEYS = "SYSTEM_CAPACITY_BYTES"
 
-[plugins]
+[[plugins]]
   # Ensure the Next.js runtime is properly configured
   package = "@netlify/plugin-nextjs"
